@@ -5,13 +5,6 @@ const ccxt = require('ccxt');
 const app = express();
 app.use(express.json());
 
-// Map TradingView tickers to MEXC market symbols
-const symbolMap = {
-  "XAUUSD": "GOLD(XAUT)/USDT",
-  "BTCUSD": "BTC/USDT"
-};
-
-// Initialize MEXC client and load markets once
 const exchange = new ccxt.mexc({
   apiKey: process.env.MEXC_API_KEY,
   secret: process.env.MEXC_API_SECRET
@@ -21,29 +14,42 @@ const exchange = new ccxt.mexc({
   await exchange.loadMarkets();
   console.log('Markets loaded');
 
-  // Health check
-  app.get('/', (req, res) => {
-    res.send('✅ Bot is up');
-  });
+  app.get('/', (req, res) => res.send('✅ Bot is up'));
 
-  // Webhook receiver
   app.post('/webhook', async (req, res) => {
     try {
-      // 1) Parse and map symbol
       const { symbol: tvSymbol, dir, entry, stop, tp } = req.body;
-      const market = symbolMap[tvSymbol] || tvSymbol;
-
-      if (!market || !dir || entry == null || stop == null || tp == null) {
-        throw new Error('Missing symbol, dir, entry, stop, or tp');
+      if (!tvSymbol || !dir || entry == null || stop == null || tp == null) {
+        throw new Error('Missing one of symbol, dir, entry, stop, or tp');
       }
 
-      // 2) Hard-coded order quantity (in XAU)
-      const amount = 0.1;
+      // Auto-detect USDT market
+      const base   = tvSymbol.replace('USD','');
+      const market = exchange.symbols.find(
+        s => s.startsWith(base) && s.endsWith('USDT')
+      );
+      if (!exchange.markets[market]) {
+        throw new Error(`Market not found: ${market}`);
+      }
 
-      // 3) Determine side
+      // Determine minimum and precision
+      const info      = exchange.markets[market];
+      const minAmt    = info.limits.amount.min;
+      const precision = info.precision.amount;
+
+      // Compute a valid order size:
+      let amount;
+      if (precision === 0) {
+        // whole numbers only → round up to 1 or higher
+        amount = Math.ceil(minAmt);
+      } else {
+        // use the min amount, rounded to allowed decimals
+        amount = parseFloat(minAmt.toFixed(precision));
+      }
+
       const side = dir === 'long' ? 'buy' : 'sell';
 
-      // 4) Execute orders
+      // Place the orders
       await exchange.createMarketOrder(market, side, amount);
       await exchange.createOrder(
         market,
@@ -68,10 +74,9 @@ const exchange = new ccxt.mexc({
     }
   });
 
-  // 5) Start the server
   const PORT = process.env.PORT || 3000;
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Listening on 0.0.0.0:${PORT}`);
-  });
+  app.listen(PORT, '0.0.0.0', () =>
+    console.log(`Listening on 0.0.0.0:${PORT}`)
+  );
 })();
 
