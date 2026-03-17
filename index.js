@@ -3,38 +3,46 @@ const express = require('express');
 const ccxt = require('ccxt');
 
 const app = express();
-// Parse incoming JSON body
 app.use(express.json());
 
-// Initialize MEXC exchange client
+// 1) Map TradingView tickers to MEXC market symbols
+const symbolMap = {
+  "XAUUSD": "GOLD(XAUT)/USDT",
+  "BTCUSD": "BTC/USDT"
+  // add more mappings here if needed
+};
+
+// 2) Initialize exchange client
 const exchange = new ccxt.mexc({
   apiKey: process.env.MEXC_API_KEY,
   secret: process.env.MEXC_API_SECRET,
 });
 
-// Health check endpoint
+// 3) Health-check endpoint
 app.get('/', (req, res) => {
   res.send('✅ Bot is up');
 });
 
-// Webhook receiver
+// 4) Webhook handler—read JSON, map symbol, place orders
 app.post('/webhook', async (req, res) => {
   try {
-    // Destructure JSON payload
-    const { symbol, dir, entry, stop, tp } = req.body;
+    // Destructure the JSON and map to real market name
+    const { symbol: tvSymbol, dir, entry, stop, tp } = req.body;
+    const market = symbolMap[tvSymbol] || tvSymbol;
 
-    if (!symbol || !dir || entry == null || stop == null || tp == null) {
-      throw new Error('Missing one of symbol, dir, entry, stop, tp');
+    // Validate payload
+    if (!market || !dir || entry == null || stop == null || tp == null) {
+      throw new Error('Missing symbol, dir, entry, stop, or tp');
     }
 
-    // Determine side and a fixed amount
+    // Determine side and amount
     const side = dir === 'long' ? 'buy' : 'sell';
     const amount = 1;
 
-    // Execute market order, stop loss, and take profit
-    await exchange.createMarketOrder(symbol, side, amount);
+    // Execute orders
+    await exchange.createMarketOrder(market, side, amount);
     await exchange.createOrder(
-      symbol,
+      market,
       'stop',
       side === 'buy' ? 'sell' : 'buy',
       amount,
@@ -42,21 +50,24 @@ app.post('/webhook', async (req, res) => {
       { stopPrice: stop }
     );
     await exchange.createLimitOrder(
-      symbol,
+      market,
       'limit',
       side === 'buy' ? 'sell' : 'buy',
       amount,
       tp
     );
 
+    // Respond success
     res.json({ success: true });
   } catch (err) {
-    console.error('Webhook handler error:', err);
+    console.error('Webhook error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Start server
+// 5) Start the server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Listening on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Listening on port ${PORT}`);
+});
 
