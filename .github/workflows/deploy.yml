@@ -12,7 +12,13 @@ jobs:
       # 1. Check out the code
       - uses: actions/checkout@v3
 
-      # 2. Set up SSH key
+      # 2a. Trust the remote host key
+      - name: Add SSH Host Key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      # 2b. Set up SSH key
       - name: Install SSH key
         uses: webfactory/ssh-agent@v0.5.4
         with:
