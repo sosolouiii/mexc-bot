@@ -1,48 +1,24 @@
-name: Build & Deploy mexc-bot
+name: Build & Push mexc-bot to Docker Hub
 
 on:
   push:
     branches: [ main ]
 
 jobs:
-  deploy:
+  build-and-push:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Check out the code
       - uses: actions/checkout@v3
 
-      # 2. Trust the remote host key (skippable now that we disable checking)
-      - name: Add SSH Host Key
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
-
-      # 3. Install SSH key
-      - name: Install SSH key
-        uses: webfactory/ssh-agent@v0.5.4
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
         with:
-          ssh-private-key: ${{ secrets.SSH_KEY }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 4. Build Docker image locally (optional)
-      - name: Build Docker image
-        run: docker build -t mexc-bot .
-
-      # 5. Deploy to remote host (skip host key checking)
-      - name: Deploy to server
-        run: |
-          ssh -o StrictHostKeyChecking=no \
-            -p "${{ secrets.SSH_PORT }}" \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
-              cd ~/mexc-bot || exit 1
-              docker stop mexc-bot || true
-              docker rm mexc-bot   || true
-              git pull origin main
-              docker build -t mexc-bot .
-              docker run -d \
-                --name mexc-bot \
-                --env-file .env \
-                -p 3000:3000 \
-                mexc-bot
-            "
-
+      - name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/mexc-bot:latest
