@@ -1,0 +1,39 @@
+name: Build & Deploy mexc-bot
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Check out the code
+      - uses: actions/checkout@v3
+
+      # 2. Set up SSH key
+      - name: Install SSH key
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+
+      # 3. Build Docker image locally (optional)
+      - name: Build Docker image
+        run: docker build -t mexc-bot .
+
+      # 4. Deploy to remote host
+      - name: Deploy to server
+        run: |
+          ssh -p "${{ secrets.SSH_PORT }}" ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+            cd ~/mexc-bot || exit 1
+            docker stop mexc-bot || true
+            docker rm mexc-bot   || true
+            git pull origin main
+            docker build -t mexc-bot .
+            docker run -d \
+              --name mexc-bot \
+              --env-file .env \
+              -p 3000:3000 \
+              mexc-bot
+          "
+
