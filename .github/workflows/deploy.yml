@@ -18,7 +18,15 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-      # 2b. Set up SSH key
+      # 2b. Debug SSH variables
+      - name: Debug SSH info
+        run: |
+          echo "HOST = ${{ secrets.SSH_HOST }}"
+          echo "PORT = ${{ secrets.SSH_PORT }}"
+          echo "KNOWN_HOSTS:"
+          cat ~/.ssh/known_hosts
+
+      # 2c. Set up SSH key
       - name: Install SSH key
         uses: webfactory/ssh-agent@v0.5.4
         with:
