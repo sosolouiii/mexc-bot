@@ -12,43 +12,37 @@ jobs:
       # 1. Check out the code
       - uses: actions/checkout@v3
 
-      # 2a. Trust the remote host key
+      # 2. Trust the remote host key (skippable now that we disable checking)
       - name: Add SSH Host Key
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -p "${{ secrets.SSH_PORT }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-      # 2b. Debug SSH variables
-      - name: Debug SSH info
-        run: |
-          echo "HOST = ${{ secrets.SSH_HOST }}"
-          echo "PORT = ${{ secrets.SSH_PORT }}"
-          echo "KNOWN_HOSTS:"
-          cat ~/.ssh/known_hosts
-
-      # 2c. Set up SSH key
+      # 3. Install SSH key
       - name: Install SSH key
         uses: webfactory/ssh-agent@v0.5.4
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
 
-      # 3. Build Docker image locally (optional)
+      # 4. Build Docker image locally (optional)
       - name: Build Docker image
         run: docker build -t mexc-bot .
 
-      # 4. Deploy to remote host
+      # 5. Deploy to remote host (skip host key checking)
       - name: Deploy to server
         run: |
-          ssh -p "${{ secrets.SSH_PORT }}" ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
-            cd ~/mexc-bot || exit 1
-            docker stop mexc-bot || true
-            docker rm mexc-bot   || true
-            git pull origin main
-            docker build -t mexc-bot .
-            docker run -d \
-              --name mexc-bot \
-              --env-file .env \
-              -p 3000:3000 \
-              mexc-bot
-          "
+          ssh -o StrictHostKeyChecking=no \
+            -p "${{ secrets.SSH_PORT }}" \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "
+              cd ~/mexc-bot || exit 1
+              docker stop mexc-bot || true
+              docker rm mexc-bot   || true
+              git pull origin main
+              docker build -t mexc-bot .
+              docker run -d \
+                --name mexc-bot \
+                --env-file .env \
+                -p 3000:3000 \
+                mexc-bot
+            "
 
