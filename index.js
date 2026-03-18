@@ -5,16 +5,18 @@ const ccxt = require('ccxt');
 const app = express();
 app.use(express.json());
 
-const exchange = new ccxt.mexc({
-  apiKey: process.env.MEXC_API_KEY,
-  secret: process.env.MEXC_API_SECRET
+const exchange = new ccxt.okx({
+  apiKey: process.env.OKX_API_KEY,
+  secret: process.env.OKX_API_SECRET,
+  password: process.env.OKX_API_PASSPHRASE,
+  options: { defaultType: 'spot' }
 });
 
 (async () => {
   await exchange.loadMarkets();
-  console.log('Markets loaded');
+  console.log('OKX markets loaded');
 
-  app.get('/', (req, res) => res.send('✅ Bot is up'));
+  app.get('/', (req, res) => res.send('✅ Bot is up on OKX'));
 
   app.post('/webhook', async (req, res) => {
     try {
@@ -23,33 +25,18 @@ const exchange = new ccxt.mexc({
         throw new Error('Missing one of symbol, dir, entry, stop, or tp');
       }
 
-      // Auto-detect USDT market
-      const base   = tvSymbol.replace('USD','');
-      const market = exchange.symbols.find(
-        s => s.startsWith(base) && s.endsWith('USDT')
-      );
+      // Auto-detect XAU spot on OKX:
+      const market = exchange.symbols.includes('XAUT/USDT')
+        ? 'XAUT/USDT'
+        : exchange.symbols.find(s => s.startsWith('XAU/USDT'));
+
       if (!exchange.markets[market]) {
         throw new Error(`Market not found: ${market}`);
       }
 
-      // Determine minimum and precision
-      const info      = exchange.markets[market];
-      const minAmt    = info.limits.amount.min;
-      const precision = info.precision.amount;
+      const amount = 0.1;
+      const side   = dir === 'long' ? 'buy' : 'sell';
 
-      // Compute a valid order size:
-      let amount;
-      if (precision === 0) {
-        // whole numbers only → round up to 1 or higher
-        amount = Math.ceil(minAmt);
-      } else {
-        // use the min amount, rounded to allowed decimals
-        amount = parseFloat(minAmt.toFixed(precision));
-      }
-
-      const side = dir === 'long' ? 'buy' : 'sell';
-
-      // Place the orders
       await exchange.createMarketOrder(market, side, amount);
       await exchange.createOrder(
         market,
@@ -75,8 +62,8 @@ const exchange = new ccxt.mexc({
   });
 
   const PORT = process.env.PORT || 3000;
-  app.listen(PORT, '0.0.0.0', () =>
-    console.log(`Listening on 0.0.0.0:${PORT}`)
-  );
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Listening on 0.0.0.0:${PORT} (OKX Spot)`);
+  });
 })();
 
